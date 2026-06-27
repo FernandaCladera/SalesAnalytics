@@ -24,42 +24,42 @@ def extract_pdf_with_fitz(pdf_path: Path, output_dir: Path) -> dict:
     doc = fitz.open(pdf_path)
     text_by_page = {}
     tables = []
-    images = []
+    # images = []
 
     for page_number, page in enumerate(doc, start=1):
         text = page.get_text("text")
         text_by_page[f"page_{page_number}"] = text.strip()
 
-        for image_index, image_info in enumerate(page.get_images(full=True), start=1):
-            xref = image_info[0]
-            base_image = doc.extract_image(xref)
-            image_bytes = base_image["image"]
-            image_ext = base_image.get("ext", "png")
-            image_name = (
-                f"{pdf_path.stem}_page{page_number}_img{image_index}.{image_ext}"
-            )
-            image_path = output_dir / "images" / image_name
-            ensure_dir(output_dir / "images")
-            image_path.write_bytes(image_bytes)
+        # for image_index, image_info in enumerate(page.get_images(full=True), start=1):
+        #    xref = image_info[0]
+        #    base_image = doc.extract_image(xref)
+        #    image_bytes = base_image["image"]
+        #    image_ext = base_image.get("ext", "png")
+        #    image_name = (
+        #        f"{pdf_path.stem}_page{page_number}_img{image_index}.{image_ext}"
+        #    )
+        #    image_path = output_dir / "images" / image_name
+        #    ensure_dir(output_dir / "images")
+        #    image_path.write_bytes(image_bytes)
 
-            images.append(
-                {
-                    "page": page_number,
-                    "image_index": image_index,
-                    "xref": xref,
-                    "width": base_image.get("width"),
-                    "height": base_image.get("height"),
-                    "colorspace": base_image.get("colorspace"),
-                    "image_path": str(image_path.resolve()),
-                }
-            )
+        #    images.append(
+        #        {
+        #            "page": page_number,
+        #            "image_index": image_index,
+        #            "xref": xref,
+        #            "width": base_image.get("width"),
+        #            "height": base_image.get("height"),
+        #            "colorspace": base_image.get("colorspace"),
+        #            "image_path": str(image_path.resolve()),
+        #        }
+        #    )
 
     return {
         "file_name": pdf_path.name,
         "file_path": str(pdf_path.resolve()),
         "text": text_by_page,
         "tables": tables,
-        "images": images,
+        #    "images": images,
     }
 
 

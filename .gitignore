@@ -1,0 +1,22 @@
+.DS_Store
+**/.DS_Store
+
+
+
+Reports/extracted_output
+data/Reports/extracted_output/
+
+__pycache__/
+.ipynb_checkpoints/
+
+echo "Scripts/data/data_final/ConsurDatabase.csv" >> .gitignore
+echo "*.csv" >> .gitignore
+
+cat >> .gitignore << 'EOF'
+
+# Data files
+*.csv
+*.zip
+Scripts/data/
+Reports/extracted_output/
+EOF
