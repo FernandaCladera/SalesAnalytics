@@ -16,7 +16,7 @@ st.set_page_config(
 )
 
 
-CONSUR_CANDIDATES = pd.read_csv("../../_local_data_backup/ConsurDatabase_clean.csv")
+CONSUR_CANDIDATES = pd.read_csv("../../_local_data_backup/CordisDatabase_clean.csv")
 TRIALS_CANDIDATES = pd.read_csv("../Scripts/data/data_final/TrialsDatabase_clean.csv")
 TRIAL_COUNTRIES_CANDIDATES = pd.read_csv(
     "../Scripts/data/data_final/TrialCountry_clean.csv"
