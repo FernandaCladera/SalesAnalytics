@@ -17,14 +17,20 @@ st.set_page_config(
 
 
 @st.cache_data(show_spinner=False)
-def load_source_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def load_source_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     consur = pd.read_csv("../data/data_clean/CordisDatabase_clean.csv")
     trials = pd.read_csv("../data/data_clean/TrialsDatabase_clean.csv")
     trial_countries = pd.read_csv("../data/data_clean/TrialCountry_clean.csv")
-    return consur, trials, trial_countries
+    cordis_opportunities = pd.read_csv("../data/data_clean/CordisOpportunities_clean.csv")
+    return consur, trials, trial_countries, cordis_opportunities
 
 
-CONSUR_CANDIDATES, TRIALS_CANDIDATES, TRIAL_COUNTRIES_CANDIDATES = load_source_data()
+(
+    CONSUR_CANDIDATES,
+    TRIALS_CANDIDATES,
+    TRIAL_COUNTRIES_CANDIDATES,
+    CORDIS_OPPORTUNITIES_CANDIDATES,
+) = load_source_data()
 
 
 ACTIVITY_LABELS = {
@@ -34,6 +40,8 @@ ACTIVITY_LABELS = {
     "PUB": "Public body",
     "OTH": "Other",
 }
+
+OPPORTUNITY_TIERS = ["High", "Medium", "Small"]
 
 
 @st.cache_data(show_spinner=False)
@@ -56,6 +64,16 @@ def clean_trials(df: pd.DataFrame) -> pd.DataFrame:
     for column in ("Decision_date", "Start_date", "End_date"):
         df[column] = pd.to_datetime(df[column], errors="coerce")
     df["decision_year"] = pd.to_numeric(df["decision_year"], errors="coerce")
+    return df
+
+
+@st.cache_data(show_spinner=False)
+def clean_cordis_opportunities(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    df = df.loc[:, ~df.columns.str.startswith("Unnamed:")]
+    df["totalCostProj"] = pd.to_numeric(df["totalCostProj"], errors="coerce").fillna(0)
+    for column in ("title", "category", "coordinator_name", "coordinator_country", "status"):
+        df[column] = df[column].astype("string").str.strip()
     return df
 
 
@@ -119,6 +137,39 @@ def horizontal_bar(
     return fig
 
 
+def stacked_year_bar(
+    data: pd.DataFrame,
+    year_col: str,
+    segment_col: str,
+    value_col: str,
+    y_label: str,
+    title: str,
+    color_sequence=None,
+):
+    """Create a consistently styled year-by-year stacked bar chart."""
+    fig = px.bar(
+        data,
+        x=year_col,
+        y=value_col,
+        color=segment_col,
+        title=title,
+        labels={year_col: "Year", value_col: y_label, segment_col: ""},
+        color_discrete_sequence=color_sequence or px.colors.qualitative.Set3,
+    )
+    fig.update_layout(
+        barmode="stack",
+        height=420,
+        margin=dict(l=5, r=10, t=55, b=5),
+        title_x=0,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend_title_text="",
+    )
+    fig.update_xaxes(dtick=1, showgrid=False)
+    fig.update_yaxes(gridcolor="rgba(128,128,128,.15)")
+    return fig
+
+
 st.markdown(
     """
     <style>
@@ -152,6 +203,7 @@ st.caption(
 consur = clean_consur(CONSUR_CANDIDATES)
 trials = clean_trials(TRIALS_CANDIDATES)
 all_trial_countries = TRIAL_COUNTRIES_CANDIDATES.copy()
+cordis_opportunities_all = clean_cordis_opportunities(CORDIS_OPPORTUNITIES_CANDIDATES)
 
 # ---------------------------------------------------------------------------
 # Sidebar filters
@@ -191,7 +243,7 @@ trial_phase_options = sorted(
 )
 selected_trial_phases = st.sidebar.multiselect("Trial phase", trial_phase_options)
 
-top_n = st.sidebar.slider("Countries / organisations shown", 5, 25, 12)
+top_n = st.sidebar.slider("Countries shown in charts", 5, 25, 12)
 
 filtered_consur = consur.copy()
 filtered_consur = multiselect_filter(filtered_consur, "period", selected_periods)
@@ -219,136 +271,229 @@ st.sidebar.divider()
 # ---------------------------------------------------------------------------
 # Shared aggregates (used across both tabs)
 # ---------------------------------------------------------------------------
-overview_tab, active_tab = st.tabs(["Opportunity overview", "Who's active"])
+cordis_tab, trials_tab = st.tabs(["CORDIS opportunities", "Clinical trials"])
+
+project_level = filtered_consur.sort_values("projectID").drop_duplicates("projectID")
 
 unique_projects = filtered_consur[filtered_consur["period"] == "2021-2027"][
     "projectID"
 ].nunique()
 unique_organisations = filtered_consur["organisationID"].nunique()
 project_country_count = filtered_consur["country_name"].nunique()
-unique_trials = filtered_trials["trial_id"].nunique()
-
-# One project budget per project; the same value repeats for each organisation.
-project_level = filtered_consur.sort_values("projectID").drop_duplicates("projectID")[
-    ["projectID", "totalCostProj"]
-]
 total_project_budget = project_level["totalCostProj"].sum() / 1000
-allocated_org_cost = filtered_consur["totalCostOrg"].sum()
-ec_contribution_total = filtered_consur["ecContribution"].sum()
+high_opportunity_projects = (project_level["opportunity_tier_cordis"] == "High").sum()
+
+unique_trials = filtered_trials["trial_id"].nunique()
+trial_country_count = trial_countries["country_name"].nunique()
 distinct_sponsors = filtered_trials["Sponsor_Co-Sponsors"].nunique()
-active_mask = (
-    filtered_trials["Overall_trial_status"]
-    .fillna("")
-    .str.contains(r"ongoing|recruit", case=False, regex=True)
-)
+active_opportunity_trials = (
+    filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
+).sum()
+high_opportunity_trials = (filtered_trials["opportunity_tier_ctis"] == "High").sum()
 
-DOMINANT_CATEGORY = "Genomics / Molecular Biology"
-category_level = (
-    filtered_consur.dropna(subset=["category"])
-    .drop_duplicates("projectID")[["projectID", "category"]]
-)
-category_totals = (
-    category_level.groupby("category")["projectID"]
-    .nunique()
-    .rename("projects")
-    .reset_index()
-)
-total_categorized = category_totals["projects"].sum()
-category_totals["share"] = (
-    category_totals["projects"] / total_categorized * 100 if total_categorized else 0
-)
-category_totals["share_label"] = category_totals["share"].map(
-    lambda value: f"{value:.1f}%"
-)
-dominant_mask = category_totals["category"] == DOMINANT_CATEGORY
-dominant_share = category_totals.loc[dominant_mask, "share"].sum()
-category_chart_data = category_totals.loc[~dominant_mask]
+# Restrict the project-level opportunity table to whatever the sidebar filters
+# currently select (the table itself has no period/status/country columns).
+cordis_opportunities = cordis_opportunities_all[
+    cordis_opportunities_all["projectID"].isin(filtered_consur["projectID"])
+].copy()
 
 # ---------------------------------------------------------------------------
-# Opportunity overview tab
+# CORDIS opportunities tab
 # ---------------------------------------------------------------------------
-with overview_tab:
+with cordis_tab:
     cols = st.columns(5)
     cols[0].metric("Countries with projects", integer(project_country_count))
     cols[1].metric("Projects 2021-2027", integer(unique_projects))
-    cols[2].metric("Clinical trials", integer(unique_trials))
+    cols[2].metric("Organisations", integer(unique_organisations))
     cols[3].metric("Project investment", euro(total_project_budget))
-    cols[4].metric("Ongoing / recruiting trials", integer(active_mask.sum()))
+    cols[4].metric("High-opportunity projects", integer(high_opportunity_projects))
 
     st.markdown(
         '<div class="dashboard-note"><b>How percentages are calculated:</b> '
-        "country percentages represent each country's share of unique "
-        "project–country or trial–country relationships. A project or trial active "
-        "in several countries contributes once to each of those countries.</div>",
+        "country and status shares represent each value's share of unique "
+        "projects. A project active in several countries contributes once to "
+        "each of those countries.</div>",
         unsafe_allow_html=True,
     )
 
+    status_summary = (
+        project_level["status"]
+        .value_counts()
+        .rename_axis("status")
+        .reset_index(name="projects")
+    )
     st.plotly_chart(
         horizontal_bar(
-            category_chart_data,
-            "projects",
-            "category",
-            "Life-science project categories",
-            "Projects",
-            "#136F63",
-            "share_label",
+            status_summary, "projects", "status", "Projects by status", "Projects",
+            "#136F63", "projects",
         ),
         width="stretch",
     )
-    if dominant_mask.any():
-        st.markdown(
-            f'<div class="dashboard-note"><b>{DOMINANT_CATEGORY}</b> is the largest '
-            f"funded category ({dominant_share:.0f}% of categorized projects) and is "
-            "shown separately here so the remaining specialties stay readable.</div>",
-            unsafe_allow_html=True,
-        )
-    st.caption(
-        'This chart always shows every category; the "Countries / organisations '
-        'shown" slider does not apply here.'
-    )
 
-    project_country_pairs = (
-        filtered_consur[["projectID", "country_name"]].dropna().drop_duplicates()
-    )
-    project_country_summary = (
-        project_country_pairs.groupby("country_name")["projectID"]
-        .nunique()
-        .rename("projects")
-        .reset_index()
-    )
-    project_pair_total = project_country_summary["projects"].sum()
-    project_country_summary["share"] = (
-        project_country_summary["projects"] / project_pair_total * 100
-        if project_pair_total
-        else 0
-    )
-    project_country_summary["share_label"] = project_country_summary["share"].map(
-        lambda value: f"{value:.1f}%"
-    )
-
-    trial_country_summary = (
-        trial_countries.groupby("country_name")["trial_id"]
-        .nunique()
-        .rename("trials")
-        .reset_index()
-    )
-    trial_pair_total = trial_country_summary["trials"].sum()
-    trial_country_summary["share"] = (
-        trial_country_summary["trials"] / trial_pair_total * 100
-        if trial_pair_total
-        else 0
-    )
-    trial_country_summary["share_label"] = trial_country_summary["share"].map(
-        lambda value: f"{value:.1f}%"
-    )
-
-    year_summary = (
-        filtered_consur.dropna(subset=["startDate"])
-        .assign(year=lambda data: data["startDate"].dt.year)
-        .groupby("year")["projectID"]
+    activity_year = (
+        filtered_consur.dropna(subset=["activityType", "project_start_year"])
+        .assign(organisation_type=lambda d: d["activityType"].map(ACTIVITY_LABELS).fillna("Unknown"))
+        [["projectID", "organisation_type", "project_start_year"]]
+        .drop_duplicates()
+        .groupby(["project_start_year", "organisation_type"])["projectID"]
         .nunique()
         .reset_index(name="projects")
     )
+    st.plotly_chart(
+        stacked_year_bar(
+            activity_year, "project_start_year", "organisation_type", "projects",
+            "Unique projects", "Projects by activity type, per year",
+            color_sequence=px.colors.qualitative.Set2,
+        ),
+        width="stretch",
+    )
+    st.caption(
+        "A project counts once per activity type it has a participant in, so "
+        "totals can exceed the project count for a given year."
+    )
+
+    category_year = (
+        filtered_consur.dropna(subset=["category", "project_start_year"])
+        [["projectID", "category", "project_start_year"]]
+        .drop_duplicates()
+        .groupby(["project_start_year", "category"])["projectID"]
+        .nunique()
+        .reset_index(name="projects")
+    )
+    st.plotly_chart(
+        stacked_year_bar(
+            category_year, "project_start_year", "category", "projects",
+            "Unique projects", "Projects by life-science category, per year",
+        ),
+        width="stretch",
+    )
+    st.caption(
+        "\"Other\" is projects that matched the initial broad relevance filter "
+        "but not a specific technology category — categories are assigned by "
+        "keyword classification and are a proxy, not a precise topic label."
+    )
+
+    top_countries = (
+        filtered_consur[["projectID", "country_name"]]
+        .dropna()
+        .drop_duplicates()
+        .groupby("country_name")["projectID"]
+        .nunique()
+        .nlargest(top_n)
+        .index
+    )
+    country_year = (
+        filtered_consur[filtered_consur["country_name"].isin(top_countries)]
+        .dropna(subset=["country_name", "project_start_year"])
+        [["projectID", "country_name", "project_start_year"]]
+        .drop_duplicates()
+        .groupby(["project_start_year", "country_name"])["projectID"]
+        .nunique()
+        .reset_index(name="projects")
+    )
+    st.plotly_chart(
+        stacked_year_bar(
+            country_year, "project_start_year", "country_name", "projects",
+            "Unique projects", f"Projects by country, per year (top {top_n})",
+        ),
+        width="stretch",
+    )
+
+    st.markdown("#### Project opportunity ranking")
+    st.caption(
+        "One row per project: category, project name and coordinating "
+        "organisation, status, investment, and a transparent High / Medium / "
+        "Small opportunity score (investment size, category fit to Tecan's "
+        "core business, status recency, and commercial-participant presence)."
+    )
+    cordis_tier_filter = st.multiselect(
+        "Opportunity tier", OPPORTUNITY_TIERS, default=OPPORTUNITY_TIERS,
+        key="cordis_tier_filter",
+    )
+    cordis_opportunities_view = multiselect_filter(
+        cordis_opportunities, "opportunity_tier_cordis", cordis_tier_filter
+    )
+    st.dataframe(
+        cordis_opportunities_view[[
+            "category", "title", "coordinator_name", "coordinator_country",
+            "status", "totalCostProj", "opportunity_tier_cordis",
+        ]].head(500),
+        width="stretch",
+        hide_index=True,
+        column_config={
+            "category": "Category",
+            "title": st.column_config.TextColumn("Project", width="large"),
+            "coordinator_name": st.column_config.TextColumn("Organisation", width="medium"),
+            "coordinator_country": "Country",
+            "status": "Status",
+            "totalCostProj": st.column_config.NumberColumn("Investment", format="€ %.0f"),
+            "opportunity_tier_cordis": "Opportunity",
+        },
+    )
+    if len(cordis_opportunities_view) > 500:
+        st.caption("Showing the first 500 matching projects, sorted by opportunity score.")
+
+# ---------------------------------------------------------------------------
+# Clinical trials tab
+# ---------------------------------------------------------------------------
+with trials_tab:
+    trial_cols = st.columns(5)
+    trial_cols[0].metric("Trials", integer(unique_trials))
+    trial_cols[1].metric("Active / recruiting opportunity", integer(active_opportunity_trials))
+    trial_cols[2].metric("Countries reached", integer(trial_country_count))
+    trial_cols[3].metric("Trial sponsor organisations", integer(distinct_sponsors))
+    trial_cols[4].metric("High-opportunity trials", integer(high_opportunity_trials))
+
+    st.markdown(
+        '<div class="dashboard-note"><b>Status groups:</b> "Active / recruiting '
+        "opportunity\" = Authorised recruiting, Ongoing recruiting, or "
+        "Authorised recruitment pending. \"Not authorised\" is tracked "
+        "separately from other inactive trials (Ended, Halted, Suspended, "
+        "Expired) since it signals a stalled application, not a completed "
+        "one.</div>",
+        unsafe_allow_html=True,
+    )
+
+    left, right = st.columns(2)
+    with left:
+        status_group_summary = (
+            filtered_trials["trial_status_group"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("status_group")
+            .reset_index(name="trials")
+        )
+        st.plotly_chart(
+            horizontal_bar(
+                status_group_summary, "trials", "status_group", "Trials by status",
+                "Trials", "#2878B5", "trials",
+            ),
+            width="stretch",
+        )
+    with right:
+        active_trials = filtered_trials[
+            filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
+        ]
+        sponsor_active_summary = (
+            active_trials["primary_sponsor_type"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("sponsor_type")
+            .reset_index(name="trials")
+        )
+        st.plotly_chart(
+            horizontal_bar(
+                sponsor_active_summary, "trials", "sponsor_type",
+                "Active-opportunity trials by sponsor type", "Trials",
+                "#C77800", "trials",
+            ),
+            width="stretch",
+        )
+        st.caption(
+            f"Based on the {len(active_trials):,} trials currently in the "
+            "active / recruiting opportunity group."
+        )
+
     trial_year_summary = (
         filtered_trials.dropna(subset=["decision_year"])
         .assign(year=lambda data: data["decision_year"].astype(int))
@@ -356,220 +501,47 @@ with overview_tab:
         .nunique()
         .reset_index(name="trials")
     )
-
-    momentum_left, momentum_right = st.columns(2)
-    with momentum_left:
-        if not year_summary.empty:
-            year_fig = px.area(
-                year_summary,
-                x="year",
-                y="projects",
-                markers=True,
-                title="New relevant projects by start year",
-                labels={"year": "Start year", "projects": "Unique projects"},
-            )
-            year_fig.update_traces(
-                line_color="#136F63", fillcolor="rgba(19,111,99,.18)"
-            )
-            year_fig.update_layout(
-                title_x=0,
-                height=380,
-                margin=dict(l=5, r=10, t=55, b=5),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-            )
-            year_fig.update_xaxes(dtick=1, showgrid=False)
-            year_fig.update_yaxes(gridcolor="rgba(128,128,128,.15)")
-            st.plotly_chart(year_fig, width="stretch")
-    with momentum_right:
-        if not trial_year_summary.empty:
-            trial_year_fig = px.area(
-                trial_year_summary,
-                x="year",
-                y="trials",
-                markers=True,
-                title="New clinical-trial decisions by year",
-                labels={"year": "Decision year", "trials": "Unique trials"},
-            )
-            trial_year_fig.update_traces(
-                line_color="#2878B5", fillcolor="rgba(40,120,181,.18)"
-            )
-            trial_year_fig.update_layout(
-                title_x=0,
-                height=380,
-                margin=dict(l=5, r=10, t=55, b=5),
-                plot_bgcolor="rgba(0,0,0,0)",
-                paper_bgcolor="rgba(0,0,0,0)",
-            )
-            trial_year_fig.update_xaxes(dtick=1, showgrid=False)
-            trial_year_fig.update_yaxes(gridcolor="rgba(128,128,128,.15)")
-            st.plotly_chart(trial_year_fig, width="stretch")
-
-    country_left, country_right = st.columns(2)
-    with country_left:
-        st.plotly_chart(
-            horizontal_bar(
-                project_country_summary.nlargest(top_n, "projects"),
-                "projects",
-                "country_name",
-                "Projects by participant country",
-                "Unique projects",
-                "#136F63",
-                "share_label",
-            ),
-            width="stretch",
+    if not trial_year_summary.empty:
+        trial_year_fig = px.area(
+            trial_year_summary,
+            x="year",
+            y="trials",
+            markers=True,
+            title="New clinical-trial decisions by year",
+            labels={"year": "Decision year", "trials": "Unique trials"},
         )
-    with country_right:
-        st.plotly_chart(
-            horizontal_bar(
-                trial_country_summary.nlargest(top_n, "trials"),
-                "trials",
-                "country_name",
-                "Clinical trials by country",
-                "Unique trials",
-                "#2878B5",
-                "share_label",
-            ),
-            width="stretch",
+        trial_year_fig.update_traces(
+            line_color="#2878B5", fillcolor="rgba(40,120,181,.18)"
         )
-
-# ---------------------------------------------------------------------------
-# Who's active tab
-# ---------------------------------------------------------------------------
-with active_tab:
-    st.subheader("Who's active — organisations, sponsors, and trials")
-    metric_cols = st.columns(4)
-    metric_cols[0].metric("Organisations", integer(unique_organisations))
-    metric_cols[1].metric("Trial sponsor organisations", integer(distinct_sponsors))
-    metric_cols[2].metric("Organisation allocations", euro(allocated_org_cost))
-    metric_cols[3].metric("EC contribution", euro(ec_contribution_total))
-    st.caption(
-        "Organisation allocations and EC contribution are summed at the "
-        "participant-organisation level."
-    )
-
-    left, right = st.columns(2)
-    with left:
-        activity = (
-            filtered_consur.assign(
-                organisation_type=filtered_consur["activityType"]
-                .map(ACTIVITY_LABELS)
-                .fillna("Unknown")
-            )
-            .groupby("organisation_type")["organisationID"]
-            .nunique()
-            .reset_index(name="organisations")
-            .sort_values("organisations", ascending=False)
-        )
-        activity_fig = px.pie(
-            activity,
-            names="organisation_type",
-            values="organisations",
-            hole=0.58,
-            title="Organisation mix",
-            color_discrete_sequence=px.colors.qualitative.Set2,
-        )
-        activity_fig.update_traces(textposition="inside", textinfo="percent")
-        activity_fig.update_layout(
+        trial_year_fig.update_layout(
             title_x=0,
-            height=430,
-            margin=dict(l=5, r=5, t=55, b=5),
-            legend_title_text="",
+            height=380,
+            margin=dict(l=5, r=10, t=55, b=5),
+            plot_bgcolor="rgba(0,0,0,0)",
+            paper_bgcolor="rgba(0,0,0,0)",
         )
-        st.plotly_chart(activity_fig, width="stretch")
-    with right:
-        sponsor_summary = (
-            filtered_trials["Sponsor_type"]
-            .fillna("Unknown")
-            .value_counts()
-            .rename_axis("sponsor_type")
-            .reset_index(name="trials")
-            .head(top_n)
-        )
-        st.plotly_chart(
-            horizontal_bar(
-                sponsor_summary,
-                "trials",
-                "sponsor_type",
-                "Trials by sponsor type",
-                "Trials",
-                "#C77800",
-                "trials",
-            ),
-            width="stretch",
-        )
+        trial_year_fig.update_xaxes(dtick=1, showgrid=False)
+        trial_year_fig.update_yaxes(gridcolor="rgba(128,128,128,.15)")
+        st.plotly_chart(trial_year_fig, width="stretch")
 
-    organisation_summary = (
-        filtered_consur.dropna(subset=["name"])
-        .groupby(["organisationID", "name", "country_name"], dropna=False)
-        .agg(
-            projects=("projectID", "nunique"),
-            allocated_cost=("totalCostOrg", "sum"),
-            ec_contribution=("ecContribution", "sum"),
-        )
-        .reset_index()
-        .sort_values(["allocated_cost", "projects"], ascending=False)
-        .head(top_n)
+    st.markdown("#### Trial opportunity ranking")
+    st.caption(
+        "One row per trial: sponsor type, sponsor / co-sponsor names, status, "
+        "and a transparent High / Medium / Small opportunity score (status "
+        "funnel stage, sponsor commercial tier, and recency)."
     )
-    organisation_summary["allocated_cost"] = organisation_summary[
-        "allocated_cost"
-    ].round(0)
-    organisation_summary["ec_contribution"] = organisation_summary[
-        "ec_contribution"
-    ].round(0)
-
-    # Most-frequent category per organisation, found via counts rather than a
-    # per-group mode() lambda: ~200x faster across ~42k organisations.
-    org_top_category = (
-        filtered_consur.dropna(subset=["category"])
-        .groupby(["organisationID", "category"])
-        .size()
-        .reset_index(name="n")
-        .sort_values("n", ascending=False)
-        .drop_duplicates("organisationID")
-        .set_index("organisationID")["category"]
+    ctis_tier_filter = st.multiselect(
+        "Opportunity tier", OPPORTUNITY_TIERS, default=OPPORTUNITY_TIERS,
+        key="ctis_tier_filter",
     )
-    organisation_summary["top_category"] = (
-        organisation_summary["organisationID"].map(org_top_category).fillna("Unknown")
+    trial_explorer = multiselect_filter(
+        filtered_trials, "opportunity_tier_ctis", ctis_tier_filter
     )
 
-    st.markdown("#### Leading organisations")
-    st.dataframe(
-        organisation_summary,
-        width="stretch",
-        hide_index=True,
-        column_config={
-            "organisationID": st.column_config.TextColumn("Organisation ID"),
-            "name": "Organisation",
-            "country_name": "Country",
-            "top_category": "Primary category",
-            "projects": st.column_config.NumberColumn("Projects", format="%d"),
-            "allocated_cost": st.column_config.NumberColumn(
-                "Allocated cost", format="€ %.0f"
-            ),
-            "ec_contribution": st.column_config.NumberColumn(
-                "EC contribution", format="€ %.0f"
-            ),
-        },
-    )
-
-    trial_table_columns = [
-        "trial_id",
-        "Title_of_the_trial",
-        "Overall_trial_status",
-        "Trial_phase",
-        "Therapeutic_area",
-        "Sponsor_Co-Sponsors",
-    ]
-    available_trial_columns = [
-        column for column in trial_table_columns if column in filtered_trials
-    ]
-    st.markdown("#### Trial explorer")
     search = st.text_input(
         "Search trial title, condition, product, or sponsor",
         placeholder="e.g. oncology, PCR, Roche...",
     )
-    trial_explorer = filtered_trials.copy()
     if search:
         searchable_columns = [
             column
@@ -592,44 +564,46 @@ with active_tab:
         trial_explorer = trial_explorer[search_mask]
 
     st.dataframe(
-        trial_explorer[available_trial_columns].head(500),
+        trial_explorer[[
+            "Title_of_the_trial", "primary_sponsor_type", "Sponsor_Co-Sponsors",
+            "Overall_trial_status", "opportunity_tier_ctis",
+        ]].head(500),
         width="stretch",
         hide_index=True,
         column_config={
-            "trial_id": "Trial ID",
             "Title_of_the_trial": st.column_config.TextColumn("Title", width="large"),
+            "primary_sponsor_type": "Sponsor type",
+            "Sponsor_Co-Sponsors": st.column_config.TextColumn("Sponsor / co-sponsors", width="medium"),
             "Overall_trial_status": "Status",
-            "Trial_phase": "Phase",
-            "Therapeutic_area": "Therapeutic area",
-            "Sponsor_Co-Sponsors": st.column_config.TextColumn(
-                "Sponsor", width="medium"
-            ),
+            "opportunity_tier_ctis": "Opportunity",
         },
     )
     if len(trial_explorer) > 500:
-        st.caption("Showing the first 500 matching records.")
+        st.caption("Showing the first 500 matching trials.")
 
     with st.expander("Methodology & definitions"):
         st.markdown(
             """
-            **How percentages are calculated**
-            Country percentages represent each country's share of unique
-            project–country or trial–country relationships. A project or trial
-            active in several countries contributes once to each of those
-            countries.
+            **Opportunity ranking (both datasets)**
+            A transparent, point-based score — not a black-box model. CORDIS
+            projects are scored on investment size (percentile tier),
+            category fit to Tecan's core instrument business, status/recency,
+            and whether a commercial (private-company) participant is
+            involved. Trials are scored on status funnel stage, sponsor
+            commercial tier, and recency. Scores are converted to High /
+            Medium / Small via percentile-rank terciles, so tier sizes track
+            the actual score distribution rather than fixed cutoffs.
 
             **Project investment vs. organisation allocations**
-            Project investment sums `totalCostProj` once per project (the same
-            value repeats on every participating-organisation row in the source
-            and must not be summed directly). Organisation allocations and EC
-            contribution are summed at the participant-organisation level
-            instead.
+            Project investment sums `totalCostProj` once per project (the
+            same value repeats on every participating-organisation row in
+            the source and must not be summed directly).
 
             **Important interpretation**
-            Public funding and clinical-trial activity are opportunity signals,
-            not confirmed purchasing intent. Life-science categories are
-            assigned by keyword classification and may contain false positives;
-            CTIS decision-date data only starts in 2022, so trial trends before
-            that year are not available.
+            Public funding and clinical-trial activity are opportunity
+            signals, not confirmed purchasing intent. Life-science categories
+            are assigned by keyword classification and may contain false
+            positives; CTIS decision-date data only starts in 2022, so trial
+            trends before that year are not available.
             """
         )
