@@ -137,6 +137,54 @@ def horizontal_bar(
     return fig
 
 
+def pie_chart(data: pd.DataFrame, names: str, values: str, title: str, color_sequence=None):
+    """Create a consistently styled pie chart with % and value labels."""
+    fig = px.pie(
+        data,
+        names=names,
+        values=values,
+        title=title,
+        color_discrete_sequence=color_sequence or px.colors.qualitative.Set3,
+    )
+    fig.update_traces(textinfo="percent+value", textposition="inside")
+    fig.update_layout(
+        height=420,
+        margin=dict(l=5, r=5, t=55, b=5),
+        title_x=0,
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        legend_title_text="",
+    )
+    return fig
+
+
+def choropleth_map(data: pd.DataFrame, locations: str, color: str, title: str):
+    """Create a consistently styled thermal-scale choropleth map."""
+    fig = px.choropleth(
+        data,
+        locations=locations,
+        color=color,
+        scope="world",
+        color_continuous_scale="thermal",
+        title=title,
+    )
+    fig.update_geos(
+        showcountries=True,
+        showcoastlines=False,
+        showland=True,
+        landcolor="rgba(128,128,128,0.08)",
+        bgcolor="rgba(0,0,0,0)",
+        projection_type="natural earth",
+    )
+    fig.update_layout(
+        height=520,
+        margin=dict(l=0, r=0, t=55, b=0),
+        title_x=0,
+        paper_bgcolor="rgba(0,0,0,0)",
+    )
+    return fig
+
+
 def stacked_year_bar(
     data: pd.DataFrame,
     year_col: str,
@@ -145,17 +193,27 @@ def stacked_year_bar(
     y_label: str,
     title: str,
     color_sequence=None,
+    show_pct: bool = False,
 ):
     """Create a consistently styled year-by-year stacked bar chart."""
+    data = data.copy()
+    text_col = None
+    if show_pct:
+        year_totals = data.groupby(year_col)[value_col].transform("sum")
+        data["pct_label"] = (data[value_col] / year_totals * 100).round(1).astype(str) + "%"
+        text_col = "pct_label"
     fig = px.bar(
         data,
         x=year_col,
         y=value_col,
         color=segment_col,
+        text=text_col,
         title=title,
         labels={year_col: "Year", value_col: y_label, segment_col: ""},
         color_discrete_sequence=color_sequence or px.colors.qualitative.Set3,
     )
+    if show_pct:
+        fig.update_traces(textposition="inside")
     fig.update_layout(
         barmode="stack",
         height=420,
@@ -243,7 +301,7 @@ trial_phase_options = sorted(
 )
 selected_trial_phases = st.sidebar.multiselect("Trial phase", trial_phase_options)
 
-top_n = st.sidebar.slider("Countries shown in charts", 5, 25, 12)
+top_n = st.sidebar.slider("Countries shown in trial country bar", 5, 25, 12)
 
 filtered_consur = consur.copy()
 filtered_consur = multiselect_filter(filtered_consur, "period", selected_periods)
@@ -274,14 +332,14 @@ st.sidebar.divider()
 cordis_tab, trials_tab = st.tabs(["CORDIS opportunities", "Clinical trials"])
 
 project_level = filtered_consur.sort_values("projectID").drop_duplicates("projectID")
-
-unique_projects = filtered_consur[filtered_consur["period"] == "2021-2027"][
-    "projectID"
-].nunique()
-unique_organisations = filtered_consur["organisationID"].nunique()
 project_country_count = filtered_consur["country_name"].nunique()
-total_project_budget = project_level["totalCostProj"].sum() / 1000
-high_opportunity_projects = (project_level["opportunity_tier_cordis"] == "High").sum()
+
+projects_2026_27 = project_level[project_level["project_start_year"].isin([2026, 2027])]
+unique_projects_2026_27 = projects_2026_27["projectID"].nunique()
+investment_2026_27 = projects_2026_27["totalCostProj"].sum()
+organisations_2026_27 = filtered_consur.loc[
+    filtered_consur["project_start_year"].isin([2026, 2027]), "organisationID"
+].nunique()
 
 unique_trials = filtered_trials["trial_id"].nunique()
 trial_country_count = trial_countries["country_name"].nunique()
@@ -301,35 +359,45 @@ cordis_opportunities = cordis_opportunities_all[
 # CORDIS opportunities tab
 # ---------------------------------------------------------------------------
 with cordis_tab:
-    cols = st.columns(5)
+    cols = st.columns(4)
     cols[0].metric("Countries with projects", integer(project_country_count))
-    cols[1].metric("Projects 2021-2027", integer(unique_projects))
-    cols[2].metric("Organisations", integer(unique_organisations))
-    cols[3].metric("Project investment", euro(total_project_budget))
-    cols[4].metric("High-opportunity projects", integer(high_opportunity_projects))
+    cols[1].metric("Projects 2026-2027", integer(unique_projects_2026_27))
+    cols[2].metric("Organisations (2026-2027)", integer(organisations_2026_27))
+    cols[3].metric("Investment (2026-2027)", euro(investment_2026_27))
 
-    st.markdown(
-        '<div class="dashboard-note"><b>How percentages are calculated:</b> '
-        "country and status shares represent each value's share of unique "
-        "projects. A project active in several countries contributes once to "
-        "each of those countries.</div>",
-        unsafe_allow_html=True,
-    )
-
+    st.markdown("#### Projects by status")
     status_summary = (
         project_level["status"]
         .value_counts()
         .rename_axis("status")
         .reset_index(name="projects")
     )
-    st.plotly_chart(
-        horizontal_bar(
-            status_summary, "projects", "status", "Projects by status", "Projects",
-            "#136F63", "projects",
-        ),
-        width="stretch",
-    )
+    status_left, status_right = st.columns(2)
+    with status_left:
+        st.plotly_chart(
+            pie_chart(status_summary, "status", "projects", "Projects by status"),
+            width="stretch",
+        )
+    with status_right:
+        st.markdown(
+            '<div class="dashboard-note"><b>What each status means for '
+            "opportunity purposes:</b><br><b>Signed</b> — current funded "
+            "opportunity to pursue now.<br><b>Closed</b> — past reference, "
+            "unlikely to yield new spend.<br><b>Terminated</b> — "
+            "discontinued, not a lead.</div>",
+            unsafe_allow_html=True,
+        )
 
+    st.markdown("#### Projects by activity type")
+    activity_all = (
+        filtered_consur.dropna(subset=["activityType"])
+        .assign(organisation_type=lambda d: d["activityType"].map(ACTIVITY_LABELS).fillna("Unknown"))
+        [["projectID", "organisation_type"]]
+        .drop_duplicates()
+        .groupby("organisation_type")["projectID"]
+        .nunique()
+        .reset_index(name="projects")
+    )
     activity_year = (
         filtered_consur.dropna(subset=["activityType", "project_start_year"])
         .assign(organisation_type=lambda d: d["activityType"].map(ACTIVITY_LABELS).fillna("Unknown"))
@@ -339,19 +407,38 @@ with cordis_tab:
         .nunique()
         .reset_index(name="projects")
     )
-    st.plotly_chart(
-        stacked_year_bar(
-            activity_year, "project_start_year", "organisation_type", "projects",
-            "Unique projects", "Projects by activity type, per year",
-            color_sequence=px.colors.qualitative.Set2,
-        ),
-        width="stretch",
-    )
+    activity_left, activity_right = st.columns(2)
+    with activity_left:
+        st.plotly_chart(
+            pie_chart(
+                activity_all, "organisation_type", "projects",
+                "Activity type mix (all years)", color_sequence=px.colors.qualitative.Set2,
+            ),
+            width="stretch",
+        )
+    with activity_right:
+        st.plotly_chart(
+            stacked_year_bar(
+                activity_year, "project_start_year", "organisation_type", "projects",
+                "Unique projects", "Projects by activity type, per year",
+                color_sequence=px.colors.qualitative.Set2, show_pct=True,
+            ),
+            width="stretch",
+        )
     st.caption(
         "A project counts once per activity type it has a participant in, so "
         "totals can exceed the project count for a given year."
     )
 
+    st.markdown("#### Projects by life-science category")
+    category_all = (
+        filtered_consur.dropna(subset=["category"])
+        [["projectID", "category"]]
+        .drop_duplicates()
+        .groupby("category")["projectID"]
+        .nunique()
+        .reset_index(name="projects")
+    )
     category_year = (
         filtered_consur.dropna(subset=["category", "project_start_year"])
         [["projectID", "category", "project_start_year"]]
@@ -360,58 +447,57 @@ with cordis_tab:
         .nunique()
         .reset_index(name="projects")
     )
-    st.plotly_chart(
-        stacked_year_bar(
-            category_year, "project_start_year", "category", "projects",
-            "Unique projects", "Projects by life-science category, per year",
-        ),
-        width="stretch",
-    )
+    category_left, category_right = st.columns(2)
+    with category_left:
+        st.plotly_chart(
+            pie_chart(category_all, "category", "projects", "Category mix (all years)"),
+            width="stretch",
+        )
+    with category_right:
+        st.plotly_chart(
+            stacked_year_bar(
+                category_year, "project_start_year", "category", "projects",
+                "Unique projects", "Projects by category, per year", show_pct=True,
+            ),
+            width="stretch",
+        )
     st.caption(
         "\"Other\" is projects that matched the initial broad relevance filter "
         "but not a specific technology category — categories are assigned by "
         "keyword classification and are a proxy, not a precise topic label."
     )
 
-    top_countries = (
-        filtered_consur[["projectID", "country_name"]]
-        .dropna()
-        .drop_duplicates()
-        .groupby("country_name")["projectID"]
+    st.markdown("#### Projects by country")
+    country_counts = (
+        filtered_consur[["projectID", "country_name", "country_iso3"]]
+        .dropna(subset=["country_iso3"])
+        .drop_duplicates(subset=["projectID", "country_iso3"])
+        .groupby(["country_iso3", "country_name"], as_index=False)["projectID"]
         .nunique()
-        .nlargest(top_n)
-        .index
-    )
-    country_year = (
-        filtered_consur[filtered_consur["country_name"].isin(top_countries)]
-        .dropna(subset=["country_name", "project_start_year"])
-        [["projectID", "country_name", "project_start_year"]]
-        .drop_duplicates()
-        .groupby(["project_start_year", "country_name"])["projectID"]
-        .nunique()
-        .reset_index(name="projects")
+        .rename(columns={"projectID": "projects"})
     )
     st.plotly_chart(
-        stacked_year_bar(
-            country_year, "project_start_year", "country_name", "projects",
-            "Unique projects", f"Projects by country, per year (top {top_n})",
-        ),
+        choropleth_map(country_counts, "country_iso3", "projects", "Projects by country"),
         width="stretch",
     )
 
     st.markdown("#### Project opportunity ranking")
     st.caption(
-        "One row per project: category, project name and coordinating "
-        "organisation, status, investment, and a transparent High / Medium / "
-        "Small opportunity score (investment size, category fit to Tecan's "
-        "core business, status recency, and commercial-participant presence)."
+        "One row per project. Closed and Terminated projects are excluded here "
+        "(see the status chart above for those). Tier is a deterministic rule: "
+        "Signed projects starting in 2026-2027 in a core Tecan category are "
+        "High; Signed projects that are core-category but not new, or new but "
+        "not core-category, are Medium; all other Signed projects are Small."
     )
+    cordis_opportunities_rankable = cordis_opportunities[
+        cordis_opportunities["opportunity_tier_cordis"] != "Not applicable"
+    ]
     cordis_tier_filter = st.multiselect(
         "Opportunity tier", OPPORTUNITY_TIERS, default=OPPORTUNITY_TIERS,
         key="cordis_tier_filter",
     )
     cordis_opportunities_view = multiselect_filter(
-        cordis_opportunities, "opportunity_tier_cordis", cordis_tier_filter
+        cordis_opportunities_rankable, "opportunity_tier_cordis", cordis_tier_filter
     )
     st.dataframe(
         cordis_opportunities_view[[
@@ -431,7 +517,7 @@ with cordis_tab:
         },
     )
     if len(cordis_opportunities_view) > 500:
-        st.caption("Showing the first 500 matching projects, sorted by opportunity score.")
+        st.caption("Showing the first 500 matching projects.")
 
 # ---------------------------------------------------------------------------
 # Clinical trials tab
@@ -453,6 +539,41 @@ with trials_tab:
         "one.</div>",
         unsafe_allow_html=True,
     )
+
+    st.markdown("#### Trials by country")
+    country_view = st.radio(
+        "Trial status group",
+        ["Active / recruiting opportunity", "Recruitment ended / completed"],
+        horizontal=True,
+        key="trial_country_status_view",
+    )
+    trials_country_join = trial_countries.merge(
+        filtered_trials[["trial_id", "trial_status_group"]], on="trial_id", how="inner"
+    )
+    country_trial_counts = (
+        trials_country_join[trials_country_join["trial_status_group"] == country_view]
+        .dropna(subset=["country_iso3"])
+        .groupby(["country_iso3", "country_name"], as_index=False)["trial_id"]
+        .nunique()
+        .rename(columns={"trial_id": "trials"})
+    )
+    country_bar_left, country_map_right = st.columns(2)
+    with country_bar_left:
+        top_bar = country_trial_counts.nlargest(top_n, "trials")
+        st.plotly_chart(
+            horizontal_bar(
+                top_bar, "trials", "country_name",
+                f"{country_view} — top {top_n} countries", "Trials",
+                "#2878B5", "trials",
+            ),
+            width="stretch",
+        )
+    with country_map_right:
+        st.plotly_chart(
+            choropleth_map(country_trial_counts, "country_iso3", "trials",
+                            f"{country_view} by country"),
+            width="stretch",
+        )
 
     left, right = st.columns(2)
     with left:
@@ -526,16 +647,22 @@ with trials_tab:
 
     st.markdown("#### Trial opportunity ranking")
     st.caption(
-        "One row per trial: sponsor type, sponsor / co-sponsor names, status, "
-        "and a transparent High / Medium / Small opportunity score (status "
-        "funnel stage, sponsor commercial tier, and recency)."
+        "Only trials currently Authorised recruiting, Ongoing recruiting, or "
+        "Authorised recruitment pending are shown — Not authorised and ended "
+        "trials are excluded. One row per trial: sponsor type, sponsor / "
+        "co-sponsor names, status, and a transparent High / Medium / Small "
+        "opportunity score (status funnel stage, sponsor commercial tier, "
+        "and recency)."
     )
+    active_trials_for_ranking = filtered_trials[
+        filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
+    ]
     ctis_tier_filter = st.multiselect(
         "Opportunity tier", OPPORTUNITY_TIERS, default=OPPORTUNITY_TIERS,
         key="ctis_tier_filter",
     )
     trial_explorer = multiselect_filter(
-        filtered_trials, "opportunity_tier_ctis", ctis_tier_filter
+        active_trials_for_ranking, "opportunity_tier_ctis", ctis_tier_filter
     )
 
     search = st.text_input(
@@ -584,15 +711,22 @@ with trials_tab:
     with st.expander("Methodology & definitions"):
         st.markdown(
             """
-            **Opportunity ranking (both datasets)**
-            A transparent, point-based score — not a black-box model. CORDIS
-            projects are scored on investment size (percentile tier),
-            category fit to Tecan's core instrument business, status/recency,
-            and whether a commercial (private-company) participant is
-            involved. Trials are scored on status funnel stage, sponsor
-            commercial tier, and recency. Scores are converted to High /
-            Medium / Small via percentile-rank terciles, so tier sizes track
-            the actual score distribution rather than fixed cutoffs.
+            **CORDIS opportunity ranking**
+            A deterministic rule, not a scored model: Closed/Terminated
+            projects are excluded from the table. Signed projects starting in
+            2026-2027 in a category that maps to Tecan's core instrument
+            business (Automation, Genomics/Molecular Biology, Proteomics/
+            Multi-omics, Diagnostics/Biomarkers, MedTech/Medical Device) are
+            High opportunity. Signed projects that are core-category but not
+            new, or new but not core-category, are Medium. All other Signed
+            projects are Small.
+
+            **Trial opportunity ranking**
+            A transparent, point-based score: status funnel stage (Active/
+            recruiting scores highest), sponsor commercial tier (Pharma/
+            Industry sponsors score highest), and recency (more recent
+            decisions score higher). Scores are converted to High/Medium/
+            Small via percentile-rank terciles.
 
             **Project investment vs. organisation allocations**
             Project investment sums `totalCostProj` once per project (the
