@@ -320,8 +320,17 @@ st.markdown(
 
 st.title("Life Science Industry — Europe Market Opportunity")
 st.caption(
-    "European research projects and clinical-trial activity derived from "
-    "CORDIS 2014 - 2027 and CTIS public data."
+    "The present project aims to identify opportunities for a MEDTECH company in Europe by analyzing the CORDIS 2014 - 2027 (*Community Research and Development Information Service*, which provide information on EU-funded research and innovation projects)"
+    " and CTIS public data ( *Clinical Trials Information System*, which provide information on clinical trials conducted in the EU) datasets."
+
+)
+
+st.caption(
+    "**Scope of the analysis**\n\n"
+    "• Projects were classified into strategic life science categories relevant to Tecan.\n"
+    "• CORDIS: Active Horizon Europe projects with signed grants and currently in progress only.\n"
+    "• CTIS: Active or recruiting clinical trials only.\n"
+    "• The objective is to identify organizations, technologies, and markets with the highest commercial potential."
 )
 
 
@@ -447,32 +456,21 @@ with cordis_tab:
         "Investment (open 2026+)", euro(open_project_level["totalCostProj"].sum())
     )
 
-    st.markdown("#### Projects by status")
-    st.caption("Among projects still open in 2026 or later.")
-    status_summary = (
-        project_level[project_level["project_end_year"] >= 2026]["status"]
-        .value_counts()
-        .rename_axis("status")
-        .reset_index(name="projects")
-    )
-    status_left, status_right = st.columns(2)
-    with status_left:
-        st.plotly_chart(
-            pie_chart(status_summary, "status", "projects", "Projects by status"),
-            width="stretch",
-        )
-    with status_right:
-        st.markdown(
-            '<div class="dashboard-note"><b>What each status means for '
-            "opportunity purposes:</b><br><b>Signed</b> — current funded "
-            "opportunity to pursue now.<br><b>Closed</b> — past reference, "
-            "unlikely to yield new spend.<br><b>Terminated</b> — "
-            "discontinued, not a lead.</div>",
-            unsafe_allow_html=True,
+    st.markdown("#### Overview")
+    st.info(
+            "The CORDIS database (2014–2027) includes life science projects across 146 countries. "
+            "As of 2026, there are **4,760 active signed projects** involving **8,428 organizations**, "
+            "representing approximately **€12.1B** in total project funding."
         )
 
-    st.markdown("#### Projects by activity type")
-    st.caption("Open projects only (project_end_year ≥ 2026, status Signed).")
+
+    st.markdown("#### Projects by *Activity Type*")
+    st.caption(
+        "Organizations are grouped by **Activity Type**: Higher / Secondary Education (e.g., University of Zurich, University of Bern), "
+        "Research Organization (e.g., Switzerland Innovation Park, PSI, Swiss Cancer Institute), "
+        "Private Company (e.g., Siemens, IBM Research, Roche), "
+        "Public Body (e.g., Geneva University Hospitals), and Other (e.g., Foundation for Innovative New Diagnostics)."
+    )
     activity_all = (
         open_projects.dropna(subset=["activityType"])
         .assign(organisation_type=lambda d: d["activityType"].map(ACTIVITY_LABELS).fillna("Unknown"))
@@ -496,7 +494,7 @@ with cordis_tab:
         st.plotly_chart(
             pie_chart(
                 activity_all, "organisation_type", "projects",
-                "Activity type mix (all years)", color_map=ACTIVITY_TYPE_COLORS,
+                "Mix by Activity Type (on going projects)", color_map=ACTIVITY_TYPE_COLORS,
             ),
             width="stretch",
         )
@@ -504,18 +502,24 @@ with cordis_tab:
         st.plotly_chart(
             stacked_year_bar(
                 activity_year, "project_start_year", "organisation_type", "projects",
-                "Unique projects", "Projects by activity type, per year",
+                "Unique projects", "Ongoing Projects by Activity Type and Start Year",
                 color_map=ACTIVITY_TYPE_COLORS, show_pct=True,
             ),
             width="stretch",
         )
-    st.caption(
-        "A project counts once per activity type it has a participant in, so "
-        "totals can exceed the project count for a given year."
+
+    st.info(
+        "Approximately **70% of active projects** are led by **Research Organizations** and **Higher / Secondary Education** institutions, making them the primary innovation ecosystem for EU-funded research. "
+        "Since 2023, **private companies** have increased their participation.  "
+        "**Commercial implication:** prioritize engagement with research institutes and universities while strengthening relationships with emerging private-sector innovators."
     )
 
-    st.markdown("#### Projects by life-science category")
-    st.caption("Open projects only (project_end_year ≥ 2026, status Signed).")
+    st.markdown("#### Projects by *Life-Science Category*")
+    st.caption(
+        "Projects were classified into categories aligned with Tecan's core business using keywords extracted from each project's objective and description. "
+        "The analysis covers nine strategic domains: Genomics / Molecular Biology, Oncology, Diagnostics / Biomarkers, Digital Health / Bioinformatics, Pharma / Biotech, "
+        "Cell / Advanced Therapies, Proteomics / Multi-omics, MedTech / Medical Device, Automation, and Other. This is a proxy approach, not a precise topic label."
+    )
     category_all = (
         open_projects.dropna(subset=["category"])
         [["projectID", "category"]]
@@ -550,14 +554,14 @@ with cordis_tab:
             ),
             width="stretch",
         )
-    st.caption(
-        "\"Other\" is projects that matched the initial broad relevance filter "
-        "but not a specific technology category — categories are assigned by "
-        "keyword classification and are a proxy, not a precise topic label."
+    st.info(
+        "Approximately **56% of active projects** are concentrated in **Genomics / Molecular Biology** and **Oncology**, followed by **Diagnostics / Biomarkers**. "
+        "These areas closely align with Tecan's laboratory automation and liquid handling portfolio. "
+        "**Commercial implication:** prioritize account mapping and commercial engagement with organizations leading projects in these domains, while increasing visibility in the growing **Diagnostics**, **Digital Health**, and **Pharma / Biotech** segments to capture emerging opportunities."
     )
 
-    st.markdown("#### Projects by country")
-    st.caption("Open projects only (project_end_year ≥ 2026, status Signed).")
+    st.markdown("#### Projects by *Country*")
+    st.caption("Mapping by country of the on-going projects with a status Signed).")
     country_counts = (
         open_projects[["projectID", "country_name", "country_iso3"]]
         .dropna(subset=["country_iso3"])
@@ -571,13 +575,21 @@ with cordis_tab:
         width="stretch",
     )
 
-    st.markdown("#### Project opportunity ranking")
+    st.info(
+        "Germany remains the largest research market in Europe, with more than 1,600 active projects, followed by Spain, France, the United Kingdom, the Netherlands, and Italy. These countries should remain the primary commercial focus, while the increasing project activity in Sweden, Austria, and Greece highlights emerging markets with growing future potential."
+    )
+
+    st.markdown("#### Project *Opportunity Ranking*")
     st.caption(
-        "One row per project. Only Signed projects open in 2026 or later "
-        "(project_end_year ≥ 2026) are shown. Tier is a deterministic rule: "
-        "open, core-Tecan-category projects are High; open-but-not-core or "
-        "core-but-not-open projects are Medium; all other Signed projects "
-        "are Small."
+        "Projects are prioritized according to their commercial relevance for Tecan. "
+        "**High**: Active projects (end date ≥ 2026) within Tecan's core business domains. "
+        "**Medium**: Projects ending in 2026 within Tecan's core business domains. "
+        "**Low**: Projects outside Tecan's strategic business areas."
+    )
+
+    st.info(
+    "Ranking projects by opportunity highlights organizations with the largest active research funding in areas aligned with Tecan's portfolio. "
+    "These organizations represent high-priority accounts for commercial engagement, helping Sales identify where to focus, understand their phase in the ongoing research, and align with the company's solutions with future laboratory needs."
     )
     cordis_opportunities_open = cordis_opportunities[
         (cordis_opportunities["project_end_year"] >= 2026)
@@ -625,10 +637,10 @@ with cordis_tab:
 with trials_tab:
     trial_cols = st.columns(5)
     trial_cols[0].metric("Trials", integer(unique_trials))
-    trial_cols[1].metric("Active / recruiting opportunity", integer(active_opportunity_trials))
-    trial_cols[2].metric("Countries reached", integer(trial_country_count))
-    trial_cols[3].metric("Trial sponsor organisations", integer(distinct_sponsors))
-    trial_cols[4].metric("High-opportunity trials", integer(high_opportunity_trials))
+    trial_cols[1].metric("Active Opportunity", integer(active_opportunity_trials))
+    trial_cols[2].metric("Countries Reached", integer(trial_country_count))
+    trial_cols[3].metric("Trial Sponsors", integer(distinct_sponsors))
+    trial_cols[4].metric("High-Opportunity Trials", integer(high_opportunity_trials))
 
     st.markdown(
         '<div class="dashboard-note"><b>Status groups:</b> "Active / recruiting '
@@ -640,7 +652,7 @@ with trials_tab:
         unsafe_allow_html=True,
     )
 
-    st.markdown("#### Trials by country")
+    st.markdown("#### Trials by *Country*")
     country_view = st.radio(
         "Trial status group",
         ["Active / recruiting opportunity", "Recruitment ended / completed"],
