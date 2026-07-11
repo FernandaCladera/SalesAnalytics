@@ -635,26 +635,72 @@ with cordis_tab:
 # Clinical trials tab
 # ---------------------------------------------------------------------------
 with trials_tab:
-    trial_cols = st.columns(5)
+    trial_cols = st.columns(4)
     trial_cols[0].metric("Trials", integer(unique_trials))
     trial_cols[1].metric("Active Opportunity", integer(active_opportunity_trials))
     trial_cols[2].metric("Countries Reached", integer(trial_country_count))
     trial_cols[3].metric("Trial Sponsors", integer(distinct_sponsors))
-    trial_cols[4].metric("High-Opportunity Trials", integer(high_opportunity_trials))
 
-    st.markdown(
-        '<div class="dashboard-note"><b>Status groups:</b> "Active / recruiting '
-        "opportunity\" = Authorised recruiting, Ongoing recruiting, or "
-        "Authorised recruitment pending. \"Not authorised\" is tracked "
-        "separately from other inactive trials (Ended, Halted, Suspended, "
-        "Expired) since it signals a stalled application, not a completed "
-        "one.</div>",
-        unsafe_allow_html=True,
+    st.info(
+    "Based on the CTIS database, the analysis identifies **4,023 clinical trials**, of which **2,069 are active or recruiting opportunities**. "
+    "These trials span **28 countries** and involve approximately **1,179 organizations**."
+    )
+
+    st.caption(
+    "**Clinical trial opportunity definition:** The analysis focuses on **active and recruiting clinical trials**, as they provide an early indicator of future demand for laboratory technologies and help identify organizations, therapeutic areas, and countries where new commercial opportunities are emerging. This includes trials that are authorised and recruiting (51.4% of the database). **Not authorised** trials are reported separately, while completed, Inactive, and Other trials are excluded from the opportunity analysis."
+    )
+
+    left, right = st.columns(2)
+    with left:
+        status_group_summary = (
+            filtered_trials["trial_status_group"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("status_group")
+            .reset_index(name="trials")
+        )
+        status_group_total = status_group_summary["trials"].sum()
+        status_group_summary["label"] = status_group_summary["trials"].map(
+            lambda v: f"{integer(v)} ({european_number(f'{v / status_group_total * 100:.1f}')}%)"
+        )
+        st.plotly_chart(
+            horizontal_bar(
+                status_group_summary, "trials", "status_group", "Trials by Status",
+                "Trials", "#2878B5", "label",
+            ),
+            width="stretch",
+        )
+    with right:
+        active_trials = filtered_trials[
+            filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
+        ]
+        sponsor_active_summary = (
+            active_trials["primary_sponsor_type"]
+            .fillna("Unknown")
+            .value_counts()
+            .rename_axis("sponsor_type")
+            .reset_index(name="trials")
+        )
+        sponsor_active_total = sponsor_active_summary["trials"].sum()
+        sponsor_active_summary["label"] = sponsor_active_summary["trials"].map(
+            lambda v: f"{integer(v)} ({european_number(f'{v / sponsor_active_total * 100:.1f}')}%)"
+        )
+        st.plotly_chart(
+            horizontal_bar(
+                sponsor_active_summary, "trials", "sponsor_type",
+                "Active-Opportunity Trials by Sponsor Type", "Trials",
+                "#C77800", "label",
+            ),
+            width="stretch",
+        )
+
+    st.info(
+        "Classifying trial sponsors by organization type shows that **82% of active clinical trials are led by hospitals, healthcare institutions, and pharmaceutical companies**. These organizations represent the largest concentration of potential commercial opportunities for Tecan."
     )
 
     st.markdown("#### Trials by *Country*")
     country_view = st.radio(
-        "Trial status group",
+        "France, Spain, and Italy have the highest number of active and recruiting clinical trials, reinforcing their research activity already observed in CORDIS projects. An additional signal is the growing clinical activity in *Poland* and *Czechia*, suggesting emerging markets where Tecan could strengthen its commercial presence and develop relationships with research organizations before demand matures.",
         ["Active / recruiting opportunity", "Recruitment ended / completed"],
         horizontal=True,
         key="trial_country_status_view",
@@ -687,96 +733,21 @@ with trials_tab:
             width="stretch",
         )
 
-    left, right = st.columns(2)
-    with left:
-        status_group_summary = (
-            filtered_trials["trial_status_group"]
-            .fillna("Unknown")
-            .value_counts()
-            .rename_axis("status_group")
-            .reset_index(name="trials")
-        )
-        status_group_total = status_group_summary["trials"].sum()
-        status_group_summary["label"] = status_group_summary["trials"].map(
-            lambda v: f"{integer(v)} ({european_number(f'{v / status_group_total * 100:.1f}')}%)"
-        )
-        st.plotly_chart(
-            horizontal_bar(
-                status_group_summary, "trials", "status_group", "Trials by status",
-                "Trials", "#2878B5", "label",
-            ),
-            width="stretch",
-        )
-    with right:
-        active_trials = filtered_trials[
-            filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
-        ]
-        sponsor_active_summary = (
-            active_trials["primary_sponsor_type"]
-            .fillna("Unknown")
-            .value_counts()
-            .rename_axis("sponsor_type")
-            .reset_index(name="trials")
-        )
-        sponsor_active_total = sponsor_active_summary["trials"].sum()
-        sponsor_active_summary["label"] = sponsor_active_summary["trials"].map(
-            lambda v: f"{integer(v)} ({european_number(f'{v / sponsor_active_total * 100:.1f}')}%)"
-        )
-        st.plotly_chart(
-            horizontal_bar(
-                sponsor_active_summary, "trials", "sponsor_type",
-                "Active-opportunity trials by sponsor type", "Trials",
-                "#C77800", "label",
-            ),
-            width="stretch",
-        )
-        st.caption(
-            f"Based on the {integer(len(active_trials))} trials currently in the "
-            "active / recruiting opportunity group."
-        )
 
-    trial_year_summary = (
-        filtered_trials.dropna(subset=["decision_year"])
-        .assign(year=lambda data: data["decision_year"].astype(int))
-        .groupby("year")["trial_id"]
-        .nunique()
-        .reset_index(name="trials")
-    )
-    if not trial_year_summary.empty:
-        trial_year_fig = px.area(
-            trial_year_summary,
-            x="year",
-            y="trials",
-            markers=True,
-            title="New clinical-trial decisions by year",
-            labels={"year": "Decision year", "trials": "Unique trials"},
-        )
-        trial_year_fig.update_traces(
-            line_color="#2878B5", fillcolor="rgba(40,120,181,.18)"
-        )
-        trial_year_fig.update_layout(
-            title_x=0,
-            height=380,
-            margin=dict(l=5, r=10, t=55, b=5),
-            plot_bgcolor="rgba(0,0,0,0)",
-            paper_bgcolor="rgba(0,0,0,0)",
-            separators=",.",
-        )
-        trial_year_fig.update_xaxes(dtick=1, showgrid=False)
-        trial_year_fig.update_yaxes(
-            gridcolor="rgba(128,128,128,.15)", tickformat=",.0f", hoverformat=",.0f"
-        )
-        st.plotly_chart(trial_year_fig, width="stretch")
 
-    st.markdown("#### Trial opportunity ranking")
+
+
+    st.markdown("#### Trial *Opportunity* Ranking")
+
     st.caption(
-        "Only trials currently Authorised recruiting, Ongoing recruiting, or "
-        "Authorised recruitment pending are shown — Not authorised and ended "
-        "trials are excluded. One row per trial: sponsor type, sponsor / "
-        "co-sponsor names, status, and a transparent High / Medium / Small "
-        "opportunity score (status funnel stage, sponsor commercial tier, "
-        "and recency)."
+        "This table includes only **active commercial opportunities** (authorised or recruiting clinical trials). "
+        "Completed, suspended, expired, and not authorised trials are excluded. "
+        "Each row represents one trial and includes the sponsor, sponsor type, trial status, and an overall opportunity rating (High, Medium, or Low) based on trial stage, sponsor profile, and recency."
+        " **Commercial action:** prioritize engagement with both sponsors and co-sponsors, as they are the organizations driving the research and the most likely decision-makers for future laboratory equipment and automation investments."
     )
+
+
+
     active_trials_for_ranking = filtered_trials[
         filtered_trials["trial_status_group"] == "Active / recruiting opportunity"
     ]
@@ -833,35 +804,21 @@ with trials_tab:
 
     with st.expander("Methodology & definitions"):
         st.markdown(
-            """
-            **CORDIS opportunity ranking**
-            A deterministic rule, not a scored model: Closed/Terminated
-            projects are excluded from the table, and only Signed projects
-            still open in 2026 or later (project_end_year ≥ 2026) are shown.
-            Open projects in a category that maps to Tecan's core instrument
-            business (Automation, Genomics/Molecular Biology, Proteomics/
-            Multi-omics, Diagnostics/Biomarkers, MedTech/Medical Device) are
-            High opportunity. Signed projects that are core-category but not
-            open in 2026+, or open but not core-category, are Medium. All
-            other Signed projects are Small.
+        """
+        **CORDIS opportunity ranking**  
+        Closed and terminated projects are excluded. The analysis focuses on signed projects that are still active in 2026 or later.
 
-            **Trial opportunity ranking**
-            A transparent, point-based score: status funnel stage (Active/
-            recruiting scores highest), sponsor commercial tier (Pharma/
-            Industry sponsors score highest), and recency (more recent
-            decisions score higher). Scores are converted to High/Medium/
-            Small via percentile-rank terciles.
+        - **High:** active projects in categories closely linked to Tecan’s core business  
+        - **Medium:** core-category projects ending sooner, or active projects with a weaker strategic fit  
+        - **Low:** all other signed projects  
 
-            **Project investment vs. organisation allocations**
-            Project investment sums `totalCostProj` once per project (the
-            same value repeats on every participating-organisation row in
-            the source and must not be summed directly).
+        **Trial opportunity ranking**  
+        Trials are ranked using three factors: trial status, sponsor type, and recency. Active or recruiting trials receive the highest weight, followed by commercially relevant sponsors and more recent activity.
 
-            **Important interpretation**
-            Public funding and clinical-trial activity are opportunity
-            signals, not confirmed purchasing intent. Life-science categories
-            are assigned by keyword classification and may contain false
-            positives; CTIS decision-date data only starts in 2022, so trial
-            trends before that year are not available.
-            """
+        **Project investment**  
+        `totalCostProj` is counted once per project, since the same project value appears across multiple participating organizations.
+
+        **How to read the results**  
+        Public funding and clinical-trial activity are market signals, not confirmed sales opportunities. Project categories are based on keyword classification, and CTIS trend analysis is limited to data available from 2022 onward.
+        """
         )
