@@ -1,5 +1,7 @@
 .DS_Store
 **/.DS_Store
+.agents
+.claude
 
 __pycache__/
 .ipynb_checkpoints/
@@ -7,9 +9,9 @@ __pycache__/
 # Ignore all data files
 *.csv
 *.zip
-Scripts/data/
 
 # Allow only the clean CSV files
 !Scripts/data/
+Scripts/data/*
 !Scripts/data/data_clean/
 !Scripts/data/data_clean/*.csv
