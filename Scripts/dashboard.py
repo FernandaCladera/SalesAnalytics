@@ -18,10 +18,10 @@ st.set_page_config(
 
 @st.cache_data(show_spinner=False)
 def load_source_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    consur = pd.read_csv("../data/data_clean/CordisDatabase_clean.csv")
-    trials = pd.read_csv("../data/data_clean/TrialsDatabase_clean.csv")
-    trial_countries = pd.read_csv("../data/data_clean/TrialCountry_clean.csv")
-    cordis_opportunities = pd.read_csv("../data/data_clean/CordisOpportunities_clean.csv")
+    consur = pd.read_csv("Scripts/data/data_clean/CordisDatabase_clean.csv")
+    trials = pd.read_csv("Scripts/data/data_clean/TrialsDatabase_clean.csv")
+    trial_countries = pd.read_csv("Scripts/data/data_clean/TrialCountry_clean.csv")
+    cordis_opportunities = pd.read_csv("Scripts/data/data_clean/CordisOpportunities_clean.csv")
     return consur, trials, trial_countries, cordis_opportunities
 
 
