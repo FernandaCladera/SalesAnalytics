@@ -1,128 +1,49 @@
 # European Life Science & MedTech Market Opportunity Analytics
 
-## Project overview
+## Overview
 
-This project develops a market-intelligence and business-intelligence workflow for
-identifying potential commercial opportunities in the European life science,
-diagnostics, and MedTech sectors.
+An opportunity-screening dashboard for a life-science/MedTech company (lab
+automation, diagnostics, genomics, drug discovery). Internal CRM/sales data
+isn't available, so the project uses public EU data as a proxy instead:
+[CORDIS](https://cordis.europa.eu/) (EU-funded research projects, Horizon
+2020 + Horizon Europe) and [CTIS](https://euclinicaltrials.eu/search-for-clinical-trials/)
+(EU clinical trials) surface which organisations, countries, and technology
+areas show the strongest funded activity — and which of those best match
+the company's core business. These are opportunity signals, not confirmed
+sales leads.
 
-The analysis is framed around a Life Science Company business areas and technology portfolio.
-Because internal sales and customer data are not available, the project uses public
-data to identify:
+## Data & pipeline
 
-- European research projects aligned with laboratory automation, diagnostics,
-  genomics, drug discovery, and related technologies;
-- clinical trials that may indicate active research programs and demand for
-  laboratory workflows, instrumentation, or automation; and
-- market and strategic context reported in Tecan's annual results.
+Two notebooks build the data the dashboard reads, run in this order:
 
-The intended output is an analytical dataset and an interactive dashboard that can
-support market prioritization by organization, country, research field, project
-value, and activity period.
+1. **`Scripts/data_extraction.ipynb`** — loads the raw CORDIS project/
+   organisation Excel exports and the raw CTIS trial CSV, keyword-filters
+   both down to life-science/MedTech-relevant records, and writes
+   `data/data_processed/*.csv`.
+2. **`Scripts/data_cleaning.ipynb`** — standardises types, adds country
+   names and ISO-3 codes (for the dashboard's choropleth maps), classifies
+   each CORDIS project into a life-science category, and derives a
+   deterministic High/Medium/Small opportunity tier for both CORDIS
+   projects and CTIS trials. Writes the dashboard-ready CSVs to
+   `data/data_clean/`.
 
-> **Project status:** Work in progress. PDF extraction and the first data preparation
-> workflows are implemented. The analytical dashboard is currently being developed.
+**`Scripts/dashboard.py`** is the Streamlit app that reads those clean
+CSVs, with two tabs: *CORDIS opportunities* and *Clinical trials*.
+`Scripts/main.py` is a separate, one-off utility that extracts text/tables
+from annual-report PDFs for business context — not part of this pipeline.
 
-## Business questions
+## Running locally
 
-The project is designed to answer questions such as:
-
-1. Which European organizations are involved in research projects relevant?
-2. Where are the strongest concentrations of relevant projects and funding?
-3. Which organizations receive the largest project-level allocations?
-4. Which countries, institutions, and therapeutic areas could represent potential
-   commercial opportunities?
-
-This is an opportunity-screening exercise. A match in the data is a signal for
-further investigation, not a confirmed sales lead.
-
-## Data sources
-
-| Source | Coverage | Role in the analysis |
-|---|---|---|
-| Tecan annual reports and presentations | FY 2023–FY 2025 | Establish business context, segments, markets, and strategic priorities |
-| [CORDIS](https://cordis.europa.eu/) project and organization datasets | Horizon 2020 (2014–2020) and Horizon Europe (2021–2027) | Identify relevant funded projects and their participating organizations |
-| [Clinical Trials Information System (CTIS)](https://euclinicaltrials.eu/search-for-clinical-trials/) export | Snapshot dated 2026-06-26 | Identify relevant European clinical trials, sponsors, conditions, products, and endpoints |
-
-The analysis currently uses a downloaded CTIS export. It does not yet retrieve
-studies programmatically from ClinicalTrials.gov or the CTIS website.
-
-## Analytical workflow
-
-```text
-Tecan reports (PDF) ──> page text and table extraction ──> strategic context
-
-CORDIS projects ──> schema and type standardization ──> keyword filtering ──┐
-                                                                         ├──> opportunity datasets
-CORDIS organizations ──> project-ID filtering ──> project enrichment ─────┘
-
-CTIS export ──> column and date cleaning ──> multi-field keyword filtering ──> trial dataset
-
-Opportunity datasets ──> validation and metrics ──> Streamlit dashboard
-```
-
-### 1. Annual-report extraction
-
-`Scripts/main.py` processes every PDF in `Reports/`.
-
-- **PyMuPDF (`fitz`)** extracts text page by page.
-- **pdfplumber** extracts detectable tables and retains their source page and table
-  number.
-- Each report produces separate `_text.json` and `_tables.json` files.
-- `extracted_summary.json` consolidates all extracted report content and metadata.
-
-The page-level JSON structure preserves traceability to the original report. Table
-extraction is best-effort because financial-report layouts are not always represented
-as native PDF tables.
-
-### 2. CORDIS extraction and preparation
-
-`Scripts/data_extraction.ipynb` contains the exploratory data engineering workflow
-for the CORDIS project and organization files.
-
-The two funding periods are processed separately because their schemas are similar
-but not identical:
-
-- Horizon 2020: 2014–2020
-- Horizon Europe: 2021–2027
-
-
-
-### 4. Clinical-trial cleaning
-
-The  `TrialsDatabase.csv`, raw snapshot contains 10,000 records; 5,918 records remain after the
-initial relevance filter. 
-
-## Repository structure
-
-```text
-SalesAnalytics/
-├── README.md
-├── Reports/
-│   ├── *.pdf
-│   └── extracted_output/
-│       ├── *_text.json
-│       ├── *_tables.json
-│       └── extracted_summary.json
-└── Scripts/
-    ├── main.py
-    ├── data_extraction.ipynb
-    └── data/
-        ├── Reports/          # CORDIS source workbooks
-        ├── data_raw/         # Raw CTIS snapshot
-        └── data_final/       # Filtered analytical outputs
-```
-
-## Running the project
-
-### Prerequisites
-
-- Python 3.10 or newer
-- Jupyter Notebook or JupyterLab
-
-Install the packages currently used by the project:
+Requires Python 3.10+.
 
 ```bash
-python -m pip install pandas numpy openpyxl requests pymupdf pdfplumber \
-  streamlit jupyter
+python -m pip install -r requirements.txt
+streamlit run Scripts/dashboard.py
 ```
+
+`data/data_clean/` is committed to the repo (the largest file,
+`CordisDatabase_clean.csv`, is gzip-compressed to stay under GitHub's 100MB
+limit), so the dashboard runs immediately — no need to re-run the notebooks
+first. `requirements.txt` covers only the dashboard's runtime
+(`streamlit`, `pandas`, `plotly`); re-running the notebooks also needs
+`pycountry`, `babel`, `openpyxl`, `pymupdf`, `pdfplumber`, and `jupyter`.
