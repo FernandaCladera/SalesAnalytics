@@ -16,12 +16,20 @@ st.set_page_config(
 )
 
 
+# Anchored to this file's own location (SalesAnalytics/Scripts/dashboard.py),
+# not the process's working directory -- deployment platforms (Streamlit
+# Community Cloud included) typically launch with cwd set to the repo root,
+# not the script's directory, so a relative path like "../data/..." or
+# "data/..." would silently break depending on how/where it's launched from.
+DATA_DIR = Path(__file__).resolve().parent.parent / "data" / "data_clean"
+
+
 @st.cache_data(show_spinner=False)
 def load_source_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    consur = pd.read_csv("Scripts/data/data_clean/CordisDatabase_clean.csv")
-    trials = pd.read_csv("Scripts/data/data_clean/TrialsDatabase_clean.csv")
-    trial_countries = pd.read_csv("Scripts/data/data_clean/TrialCountry_clean.csv")
-    cordis_opportunities = pd.read_csv("Scripts/data/data_clean/CordisOpportunities_clean.csv")
+    consur = pd.read_csv(DATA_DIR / "CordisDatabase_clean.csv.gz")
+    trials = pd.read_csv(DATA_DIR / "TrialsDatabase_clean.csv")
+    trial_countries = pd.read_csv(DATA_DIR / "TrialCountry_clean.csv")
+    cordis_opportunities = pd.read_csv(DATA_DIR / "CordisOpportunities_clean.csv")
     return consur, trials, trial_countries, cordis_opportunities
 
 

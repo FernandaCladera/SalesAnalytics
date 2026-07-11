@@ -11,7 +11,7 @@ __pycache__/
 *.zip
 
 # Allow only the clean CSV files
-!Scripts/data/
-Scripts/data/*
-!Scripts/data/data_clean/
-!Scripts/data/data_clean/*.csv
+!data/
+data/*
+!data/data_clean/
+!data/data_clean/*.csv
