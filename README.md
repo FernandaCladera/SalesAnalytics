@@ -2,15 +2,7 @@
 
 ## Overview
 
-An opportunity-screening dashboard for a life-science/MedTech company (lab
-automation, diagnostics, genomics, drug discovery). Internal CRM/sales data
-isn't available, so the project uses public EU data as a proxy instead:
-[CORDIS](https://cordis.europa.eu/) (EU-funded research projects, Horizon
-2020 + Horizon Europe) and [CTIS](https://euclinicaltrials.eu/search-for-clinical-trials/)
-(EU clinical trials) surface which organisations, countries, and technology
-areas show the strongest funded activity — and which of those best match
-the company's core business. These are opportunity signals, not confirmed
-sales leads.
+This project explores how public European data can support commercial opportunity identification for life science and MedTech companies. It combines CORDIS (EU-funded research projects) and CTIS (EU clinical trials) to identify organizations, countries, and research areas with the highest level of ongoing activity that align with the company's business. The results should be interpreted as market opportunity signals rather than confirmed sales opportunities.
 
 ## Data & pipeline
 
@@ -33,8 +25,6 @@ CSVs, with two tabs: *CORDIS opportunities* and *Clinical trials*.
 from annual-report PDFs for business context — not part of this pipeline.
 
 ## Running locally
-
-Requires Python 3.10+.
 
 ```bash
 python -m pip install -r requirements.txt
