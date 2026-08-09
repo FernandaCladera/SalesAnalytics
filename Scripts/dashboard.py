@@ -335,7 +335,7 @@ st.caption(
 
 st.caption(
     "**Scope of the analysis**\n\n"
-    "• Projects were classified into strategic life science categories relevant to Tecan.\n"
+    "• Projects were classified into strategic life science categories relevant to a MedTech Company.\n"
     "• CORDIS: Active Horizon Europe projects with signed grants and currently in progress only.\n"
     "• CTIS: Active or recruiting clinical trials only.\n"
     "• The objective is to identify organizations, technologies, and markets with the highest commercial potential."
@@ -524,7 +524,7 @@ with cordis_tab:
 
     st.markdown("#### Projects by *Life-Science Category*")
     st.caption(
-        "Projects were classified into categories aligned with Tecan's core business using keywords extracted from each project's objective and description. "
+        "Projects were classified into categories aligned with the company's core business using keywords extracted from each project's objective and description. "
         "The analysis covers nine strategic domains: Genomics / Molecular Biology, Oncology, Diagnostics / Biomarkers, Digital Health / Bioinformatics, Pharma / Biotech, "
         "Cell / Advanced Therapies, Proteomics / Multi-omics, MedTech / Medical Device, Automation, and Other. This is a proxy approach, not a precise topic label."
     )
@@ -564,7 +564,7 @@ with cordis_tab:
         )
     st.info(
         "Approximately **56% of active projects** are concentrated in **Genomics / Molecular Biology** and **Oncology**, followed by **Diagnostics / Biomarkers**. "
-        "These areas closely align with Tecan's laboratory automation and liquid handling portfolio. "
+        "These areas closely align with the company's laboratory automation and liquid handling portfolio. "
         "**Commercial implication:** prioritize account mapping and commercial engagement with organizations leading projects in these domains, while increasing visibility in the growing **Diagnostics**, **Digital Health**, and **Pharma / Biotech** segments to capture emerging opportunities."
     )
 
@@ -589,14 +589,14 @@ with cordis_tab:
 
     st.markdown("#### Project *Opportunity Ranking*")
     st.caption(
-        "Projects are prioritized according to their commercial relevance for Tecan. "
-        "**High**: Active projects (end date ≥ 2026) within Tecan's core business domains. "
-        "**Medium**: Projects ending in 2026 within Tecan's core business domains. "
-        "**Low**: Projects outside Tecan's strategic business areas."
+        "Projects are prioritized according to their commercial relevance for the medtech company. "
+        "**High**: Active projects (end date ≥ 2026) within the company's core business domains. "
+        "**Medium**: Projects ending in 2026 within the company's core business domains. "
+        "**Low**: Projects outside the company's strategic business areas."
     )
 
     st.info(
-    "Ranking projects by opportunity highlights organizations with the largest active research funding in areas aligned with Tecan's portfolio. "
+    "Ranking projects by opportunity highlights organizations with the largest active research funding in areas aligned with the company's portfolio. "
     "These organizations represent high-priority accounts for commercial engagement, helping Sales identify where to focus, understand their phase in the ongoing research, and align with the company's solutions with future laboratory needs."
     )
     cordis_opportunities_open = cordis_opportunities[
@@ -703,12 +703,12 @@ with trials_tab:
         )
 
     st.info(
-        "Classifying trial sponsors by organization type shows that **82% of active clinical trials are led by hospitals, healthcare institutions, and pharmaceutical companies**. These organizations represent the largest concentration of potential commercial opportunities for Tecan."
+        "Classifying trial sponsors by organization type shows that **82% of active clinical trials are led by hospitals, healthcare institutions, and pharmaceutical companies**. These organizations represent the largest concentration of potential commercial opportunities for the medtech company."
     )
 
     st.markdown("#### Trials by *Country*")
     country_view = st.radio(
-        "France, Spain, and Italy have the highest number of active and recruiting clinical trials, reinforcing their research activity already observed in CORDIS projects. An additional signal is the growing clinical activity in *Poland* and *Czechia*, suggesting emerging markets where Tecan could strengthen its commercial presence and develop relationships with research organizations before demand matures.",
+        "France, Spain, and Italy have the highest number of active and recruiting clinical trials, reinforcing their research activity already observed in CORDIS projects. An additional signal is the growing clinical activity in *Poland* and *Czechia*, suggesting emerging markets where the medtech company could strengthen its commercial presence and develop relationships with research organizations before demand matures.",
         ["Active / recruiting opportunity", "Recruitment ended / completed"],
         horizontal=True,
         key="trial_country_status_view",
@@ -816,7 +816,7 @@ with trials_tab:
         **CORDIS opportunity ranking**  
         Closed and terminated projects are excluded. The analysis focuses on signed projects that are still active in 2026 or later.
 
-        - **High:** active projects in categories closely linked to Tecan’s core business  
+        - **High:** active projects in categories closely linked to the medtech company’s core business  
         - **Medium:** core-category projects ending sooner, or active projects with a weaker strategic fit  
         - **Low:** all other signed projects  
 
