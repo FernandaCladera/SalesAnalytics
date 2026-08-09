@@ -328,7 +328,7 @@ st.markdown(
 
 st.title("Life Science Industry — Europe Market Opportunity")
 st.caption(
-    "The present project aims to identify opportunities for a MEDTECH company in Europe by analyzing the CORDIS 2014 - 2027 (*Community Research and Development Information Service*, which provide information on EU-funded research and innovation projects)"
+    "The present project aims to identify opportunities for a Medtech company in Europe by analyzing the CORDIS 2014 - 2027 (*Community Research and Development Information Service*, which provide information on EU-funded research and innovation projects)"
     " and CTIS public data ( *Clinical Trials Information System*, which provide information on clinical trials conducted in the EU) datasets."
 
 )
